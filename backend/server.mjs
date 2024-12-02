@@ -1,6 +1,10 @@
 import OpenAI from "openai";
 import express from "express";
 import cors from "cors";
+import multer from "multer";
+import { exec } from "child_process";
+import fs from "fs";
+import path from "path";
 
 const app = express();
 const PORT = process.env.PORT ?? 5000;
@@ -12,60 +16,86 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY, // Access the API key from environment variable
 });
 
-/// note - a better approach for memory handling is using an external storage, but since this project is local I logged it to a local file
-// for a cloud based approach i would upload the memory to a storage like aws buckets or a shared fs
+const upload = multer({ dest: "uploads/" }); // Temporary storage for uploaded files
 
-let conversationHistory = []; // This resets when the server restarts
-
-
-app.post("/api/chat", async (req, res) => {
-  const { messages } = req.body;
-
-  
-
-  try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini", 
-      messages,
+// Helper to parse documents
+const parseDocument = (filePath) => {
+  return new Promise((resolve, reject) => {
+    exec(`python parse_document.py ${filePath}`, (error, stdout, stderr) => {
+      if (error) {
+        console.error("Error parsing document:", stderr);
+        return reject(stderr || "Error parsing document");
+      }
+      resolve(stdout.trim());
     });
-    res.json({ reply: response.choices[0].message.content });
+  });
+};
+
+// Chat endpoint
+app.post("/api/chat", upload.single("file"), async (req, res) => {
+  try {
+    console.log("File received:", req.file);
+    console.log("Messages received:", req.body.messages);
+
+    const parsedMessages = JSON.parse(req.body.messages || "[]"); // Fallback to an empty array if undefined
+    console.log("Parsed messages:", parsedMessages);
+
+    if (!parsedMessages.length) {
+      return res.status(400).json({ error: "No messages found" });
+    }
+
+    let documentContent = "";
+
+    if (req.file) {
+      console.log("File path for parsing:", req.file.path);
+      try {
+        documentContent = await parseDocument(req.file.path);
+        console.log("Parsed document content:", documentContent);
+      } catch (error) {
+        console.error("Error parsing document:", error);
+        return res.status(500).json({ error: "Error parsing document" });
+      }
+    }
+
+    const queryContext = documentContent
+      ? `${documentContent}\n\n${
+          parsedMessages[parsedMessages.length - 1].content
+        }`
+      : parsedMessages[parsedMessages.length - 1].content;
+
+    console.log("Query context:", queryContext);
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        ...parsedMessages,
+        { role: "system", content: "You are a helpful assistant." },
+        { role: "user", content: queryContext },
+      ],
+    });
+
+    const botMessage = {
+      role: "assistant",
+      content: response.choices[0].message.content,
+    };
+
+    res.json({ reply: botMessage.content });
   } catch (error) {
-    console.error(error);
+    console.error("Error in /api/chat:", error);
     res.status(500).json({ error: "Something went wrong" });
   }
+});
+
+// Cleanup uploaded files
+app.use((req, res, next) => {
+  if (req.file && fs.existsSync(req.file.path)) {
+    fs.unlink(req.file.path, (err) => {
+      if (err) console.error("Error deleting file:", err);
+    });
+  }
+  next();
 });
 
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
 });
-
-// async function test() {
-//     curl https://api.openai.com/v1/chat/completions \
-//   -H "Content-Type: application/json" \
-//   -H "Authorization: Bearer $OPENAI_API_KEY" \
-//   -d '{
-//      "model": "gpt-4o-mini",
-//      "messages": [{"role": "user", "content": "Say this is a test!"}],
-//      "temperature": 0.7
-//    }'
-// }
-// const MSG = "please say hello";
-// async function getHaiku() {
-//   // Request to OpenAI API
-//   const completion = await openai.chat.completions.create({
-//     model: "gpt-4o-mini", // Choose the model (can be GPT-4 or others)
-//     messages: [
-//       { role: "system", content: "You are a helpful assistant." },
-//       {
-//         role: "user",
-//         content: MSG,
-//       },
-//     ],
-//   });
-
-//   // Log the generated response (the haiku)
-//   console.log(completion.choices[0].message);
-// }
-
-// // Call the function
-// getHaiku();
