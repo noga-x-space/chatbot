@@ -34,10 +34,8 @@ const parseDocument = (filePath) => {
 // Chat endpoint
 app.post("/api/chat", upload.single("file"), async (req, res) => {
   try {
-    console.log("File received:", req.file);
-    console.log("Messages received:", req.body.messages);
 
-    const parsedMessages = JSON.parse(req.body.messages || "[]"); // Fallback to an empty array if undefined
+    const parsedMessages = JSON.parse(req.body.messages || "[]"); // prevent undefined errors 
     console.log("Parsed messages:", parsedMessages);
 
     if (!parsedMessages.length) {
@@ -46,11 +44,10 @@ app.post("/api/chat", upload.single("file"), async (req, res) => {
 
     let documentContent = "";
 
+    //if a file exists, parse it into text and save into documentContent
     if (req.file) {
-      console.log("File path for parsing:", req.file.path);
       try {
         documentContent = await parseDocument(req.file.path);
-        console.log("Parsed document content:", documentContent);
       } catch (error) {
         console.error("Error parsing document:", error);
         return res.status(500).json({ error: "Error parsing document" });
@@ -62,8 +59,6 @@ app.post("/api/chat", upload.single("file"), async (req, res) => {
           parsedMessages[parsedMessages.length - 1].content
         }`
       : parsedMessages[parsedMessages.length - 1].content;
-
-    console.log("Query context:", queryContext);
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
