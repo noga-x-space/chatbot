@@ -28,6 +28,16 @@ Python for document parsing (via PyPDF2 and python-docx)
 ### External Services:
 
 ## OpenAI API for chatbot responses
+
+## Prerequisites
+Before you can run this project, ensure you have the following installed and configured on your system:
++ node.js
++ Python
++ vite
++ OpenAI API key 
+
+
+
 #### Setup Instructions
 1. Clone the Repository
 ```bash

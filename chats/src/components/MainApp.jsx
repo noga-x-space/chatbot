@@ -3,7 +3,9 @@ import ChatWindow from "./ChatWindow";
 import axios from "axios";
 
 const MainApp = () => {
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState([
+    { role: "assistant", content: "Hello and Welcome to Noga's Chatbot!" },
+  ]);
   const [input, setInput] = useState("");
   const [file, setFile] = useState(null); // State for file upload
 
